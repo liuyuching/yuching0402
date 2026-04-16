@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f0f1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>表情挑戰 😂 Face Challenge</title>
+<meta property="og:title" content="表情挑戰 Face Challenge">
+<meta property="og:description" content="用你的臉通過30關！生成表情拼圖分享給朋友 😂">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  html,body{height:100%;background:#0f0f1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+  body{position:fixed;width:100%}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+  #ad-bar{height:10vh;min-height:44px;background:#080810;display:flex;align-items:center;justify-content:center;flex-shrink:0;border-bottom:1px solid #1a1a2e}
+  #ad-bar span{color:#2a2a3e;font-size:11px;letter-spacing:2px}
+  #game-area{flex:1;position:relative;overflow:hidden}
+
+  /* ── SCREENS ── */
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+  .screen.active{display:flex}
+
+  /* START */
+  #start-screen{background:linear-gradient(180deg,#1a0a3e 0%,#0f0f1a 60%);align-items:center;justify-content:space-between;padding:24px 20px 20px}
+  .hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;flex:1;justify-content:center}
+  .hero .icon{font-size:72px;animation:bounce 1.4s ease-in-out infinite}
+  @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  .hero h1{font-size:32px;font-weight:900;letter-spacing:-1px}
+  .hero p{font-size:13px;color:#a78bfa;line-height:1.7;max-width:260px}
+  .diff-row{display:flex;gap:8px;margin-top:4px}
+  .diff-chip{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:8px 10px;text-align:center;font-size:11px;color:#9ca3af}
+  .diff-chip .de{font-size:20px;display:block;margin-bottom:2px}
+  .input-area{width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px}
+  .input-label{font-size:11px;color:#6b7280;margin-bottom:2px}
+  .text-input{width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:14px;padding:13px 16px;color:#fff;font-size:15px;outline:none;-webkit-appearance:none}
+  .text-input:focus{border-color:#7c3aed}
+  .text-input::placeholder{color:#374151}
+  .btn-primary{width:100%;background:#7c3aed;border:none;border-radius:14px;padding:16px;color:#fff;font-size:17px;font-weight:700;cursor:pointer;transition:background .15s,transform .1s}
+  .btn-primary:active{background:#6d28d9;transform:scale(0.97)}
+  .btn-ghost{width:100%;background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:12px;color:#9ca3af;font-size:13px;cursor:pointer}
+  .btn-ghost:active{background:rgba(255,255,255,0.05)}
+
+  /* GAME */
+  #game-screen{background:#000}
+  #camera-canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  video{display:none}
+  #shot-canvas{display:none}
+  .runner-lines{position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(90deg,transparent,transparent 100px,rgba(255,255,255,0.025) 100px,rgba(255,255,255,0.025) 101px);transition:transform .35s ease}
+  .hud-top{position:absolute;top:0;left:0;right:0;padding:10px 14px 20px;background:linear-gradient(180deg,rgba(0,0,0,.8) 0%,transparent 100%)}
+  .progress-bar{height:5px;background:rgba(255,255,255,.12);border-radius:99px;margin-bottom:8px;overflow:hidden}
+  .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#ec4899);border-radius:99px;transition:width .5s ease}
+  .hud-info{display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,.7)}
+  .hud-info strong{color:#fff;font-size:13px}
+  .target-area{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none}
+  .target-emoji{font-size:96px;line-height:1;filter:drop-shadow(0 6px 20px rgba(0,0,0,.9));transition:transform .2s}
+  .target-emoji.pop{transform:scale(1.2)}
+  .target-label{color:#fff;font-size:20px;font-weight:900;margin-top:8px;text-shadow:0 2px 12px rgba(0,0,0,.9)}
+  .target-diff{color:rgba(255,255,255,.35);font-size:10px;margin-top:3px;text-transform:uppercase;letter-spacing:2px}
+  .timer-bar-wrap{position:absolute;bottom:24px;left:16px;right:16px}
+  .timer-bar{height:8px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden}
+  .timer-fill{height:100%;border-radius:99px;transition:width 1s linear,background .5s}
+  .timer-fill.green{background:#34d399}
+  .timer-fill.yellow{background:#fbbf24}
+  .timer-fill.red{background:#f87171}
+  .timer-sec{text-align:center;font-size:11px;color:rgba(255,255,255,.4);margin-top:4px}
+  .overlay-ok{position:absolute;inset:0;background:rgba(16,185,129,.25);display:none;align-items:center;justify-content:center;pointer-events:none}
+  .overlay-fail{position:absolute;inset:0;background:rgba(239,68,68,.25);display:none;align-items:center;justify-content:center;pointer-events:none;animation:shake .4s}
+  @keyframes shake{0%,100%{transform:none}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-7px)}80%{transform:translateX(7px)}}
+  .overlay-icon{font-size:80px;filter:drop-shadow(0 0 20px rgba(255,255,255,.3))}
+  .no-face{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.75);border-radius:16px;padding:12px 20px;text-align:center;pointer-events:none;display:none}
+  .no-face p{font-size:13px;margin-top:4px;color:#d1d5db}
+
+  /* RESULT */
+  #result-screen{background:#0f0f1a;padding:0}
+  .result-inner{max-width:360px;margin:0 auto;padding:20px 16px 32px;display:flex;flex-direction:column;gap:14px}
+  .result-title{text-align:center;font-size:22px;font-weight:900;line-height:1.35}
+  .result-sub{text-align:center;font-size:13px;color:#6b7280;margin-top:2px}
+  .rank-badge{border-radius:18px;padding:14px;text-align:center;border:1px solid}
+  .rank-badge.gold{background:rgba(180,130,0,.2);border-color:rgba(202,138,4,.4)}
+  .rank-badge.purple{background:rgba(109,40,217,.15);border-color:rgba(124,58,237,.35)}
+  .rank-badge .rank-icon{font-size:32px;margin-bottom:4px}
+  .rank-badge .rank-text{font-size:15px;font-weight:700}
+  .comment-row{display:flex;gap:8px;margin-top:10px}
+  .comment-row input{flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(202,138,4,.3);border-radius:10px;padding:9px 12px;color:#fff;font-size:13px;outline:none;-webkit-appearance:none}
+  .comment-row button{background:#92400e;border:none;border-radius:10px;padding:9px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .collage-wrap{border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:#1a0a2e;min-height:180px;display:flex;align-items:center;justify-content:center}
+  .collage-wrap img,.collage-wrap canvas{width:100%;display:block}
+  .collage-loading{color:#4b5563;font-size:13px;text-align:center}
+  .btn-download{width:100%;background:#7c3aed;border:none;border-radius:14px;padding:14px;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+  .btn-download:disabled{opacity:.4}
+  .btn-download:active{transform:scale(.97)}
+  .share-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .share-header{display:flex;justify-content:space-between;align-items:center}
+  .share-header span{font-size:11px;color:#6b7280}
+  .btn-swap{background:transparent;border:1px solid rgba(124,58,237,.4);border-radius:8px;padding:4px 10px;color:#a78bfa;font-size:11px;cursor:pointer}
+  .share-text{font-size:13px;color:#d1d5db;line-height:1.7;white-space:pre-line}
+  .btn-copy{width:100%;background:#1e3a5f;border:none;border-radius:12px;padding:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-copy:active{transform:scale(.97)}
+  .challenge-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;text-align:center;display:flex;flex-direction:column;gap:8px}
+  .challenge-box .label{font-size:13px;font-weight:700}
+  .challenge-box .url{font-size:11px;color:#7c3aed;font-family:monospace;word-break:break-all}
+  .btn-link{width:100%;background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:11px;color:#d1d5db;font-size:13px;cursor:pointer}
+  .board-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px}
+  .board-title{font-size:11px;color:#6b7280;margin-bottom:10px;display:flex;justify-content:space-between}
+  .board-entry{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:10px}
+  .board-entry.me{background:rgba(124,58,237,.15)}
+  .board-medal{font-size:20px;width:28px;text-align:center;flex-shrink:0}
+  .board-name{flex:1;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .board-name.me-name{color:#a78bfa}
+  .board-comment{font-size:11px;color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .board-time{font-size:13px;font-family:monospace;flex-shrink:0}
+  .board-scroll{font-size:12px;color:#6b7280;padding:6px 6px 0;display:flex;gap:8px}
+  .board-scroll .brank{font-size:11px;color:#4b5563;font-family:monospace;width:28px}
+  .author-line{text-align:center;font-size:11px;color:#4b5563}
+  .author-line a{color:#7c3aed;text-decoration:underline;text-underline-offset:2px}
+  .btn-restart{width:100%;background:transparent;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:12px;color:#6b7280;font-size:13px;cursor:pointer}
+
+  /* LEADERBOARD inline */
+  #lb-section{margin-top:0}
+
+  /* Loading */
+  #loading-screen{position:absolute;inset:0;background:#0f0f1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:100}
+  .loading-emoji{font-size:48px;animation:spin 1.5s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-text{font-size:14px;color:#6b7280}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- 廣告條 10% -->
+  <div id="ad-bar">
+    <!-- 替換成你的 AdSense 程式碼 -->
+    <span>FACE CHALLENGE · 表情挑戰</span>
+  </div>
+
+  <!-- 遊戲主區 90% -->
+  <div id="game-area">
+
+    <!-- 載入中 -->
+    <div id="loading-screen">
+      <div class="loading-emoji">🎭</div>
+      <div class="loading-text">載入臉部辨識引擎...</div>
+    </div>
+
+    <!-- 開始畫面 -->
+    <div id="start-screen" class="screen">
+      <div class="hero">
+        <span class="icon">🤪</span>
+        <h1>表情挑戰</h1>
+        <p>30關、30種表情<br>用你的臉通關，生成拼圖分享給朋友！</p>
+        <div class="diff-row">
+          <div class="diff-chip"><span class="de">😊</span>前10關<br>輕鬆</div>
+          <div class="diff-chip"><span class="de">😤</span>中10關<br>普通</div>
+          <div class="diff-chip"><span class="de">🤪</span>後10關<br>崩潰</div>
+        </div>
+      </div>
+      <div class="input-area">
+        <div>
+          <div class="input-label">你的 Threads 帳號（可選）</div>
+          <input id="username-input" class="text-input" type="text" placeholder="@username" autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+        <button class="btn-primary" onclick="startGame()">開始挑戰 🚀</button>
+        <button class="btn-ghost" onclick="toggleBoard()">查看排行榜 🏆</button>
+        <div id="lb-section" style="display:none"></div>
+        <p style="text-align:center;font-size:11px;color:#374151">需要相機權限 · 僅在瀏覽器內執行</p>
+      </div>
+    </div>
+
+    <!-- 遊戲畫面 -->
+    <div id="game-screen" class="screen">
+      <video id="cam-video" playsinline muted autoplay></video>
+      <canvas id="camera-canvas"></canvas>
+      <canvas id="shot-canvas"></canvas>
+      <div class="runner-lines" id="runner-lines"></div>
+
+      <div class="overlay-ok" id="overlay-ok"><span class="overlay-icon">✅</span></div>
+      <div class="overlay-fail" id="overlay-fail"><span class="overlay-icon">❌</span></div>
+      <div class="no-face" id="no-face">
+        <span style="font-size:28px">📷</span>
+        <p>把臉對準鏡頭</p>
+      </div>
+
+      <div class="hud-top">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+        <div class="hud-info">
+          <strong id="hud-level">關卡 1/30</strong>
+          <span id="hud-errors">失誤 0</span>
+          <span id="hud-user">@player</span>
+        </div>
+      </div>
+
+      <div class="target-area">
+        <div class="target-emoji" id="target-emoji">😊</div>
+        <div class="target-label" id="target-label">微笑</div>
+        <div class="target-diff" id="target-diff">easy</div>
+      </div>
+
+      <div class="timer-bar-wrap">
+        <div class="timer-bar"><div class="timer-fill green" id="timer-fill" style="width:100%"></div></div>
+        <div class="timer-sec" id="timer-sec">5s</div>
+      </div>
+    </div>
+
+    <!-- 結果畫面 -->
+    <div id="result-screen" class="screen">
+      <div class="result-inner">
+        <div>
+          <div class="result-title" id="result-title">表情之神！</div>
+          <div class="result-sub" id="result-sub">通關時間：99 秒</div>
+        </div>
+        <div id="rank-section"></div>
+        <div class="collage-wrap" id="collage-wrap">
+          <div class="collage-loading">🎭 生成拼圖中...</div>
+        </div>
+        <button class="btn-download" id="btn-download" disabled onclick="downloadCollage()">📥 下載表情拼圖</button>
+        <div class="share-box">
+          <div class="share-header">
+            <span>分享文案</span>
+            <button class="btn-swap" onclick="swapText()">換一句 🔀</button>
+          </div>
+          <div class="share-text" id="share-text"></div>
+          <button class="btn-copy" id="btn-copy" onclick="copyText()">📋 複製文案 → 貼到 Threads</button>
+        </div>
+        <div class="challenge-box">
+          <div class="label">🎯 挑戰你的朋友</div>
+          <div class="url" id="game-url-display"></div>
+          <button class="btn-link" onclick="copyLink()">複製遊戲連結 🔗</button>
+        </div>
+        <div class="board-box" id="result-board"></div>
+        <div class="author-line">喜歡這遊戲？追蹤作者 <a href="https://threads.net/@YOUR_THREADS" target="_blank" id="author-link">@YOUR_THREADS</a></div>
+        <button class="btn-restart" onclick="restartGame()">🔄 再玩一次</button>
+      </div>
+    </div>
+
+  </div><!-- /game-area -->
+</div><!-- /app -->
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+
+<script>
+// ═══════════════════════════════════════════
+//  ⚙️  設定區（改這裡就好）
+// ═══════════════════════════════════════════
+const CONFIG = {
+  gameUrl:       window.location.href.split('?')[0],  // 自動取得目前網址
+  authorThreads: 'YOUR_THREADS',   // ← 改成你的 Threads 帳號（不含@）
+  // 排行榜 API（可選，不填就用本地 localStorage）
+  // apiBase: 'https://your-backend.vercel.app',
+};
+
+// ═══════════════════════════════════════════
+//  關卡定義
+// ═══════════════════════════════════════════
+const ALL_LEVELS = [
+  // EASY
+  {ex:'smile',        emoji:'😊', label:'微笑',       time:6, thr:0.50, diff:'easy'},
+  {ex:'big_smile',    emoji:'😄', label:'大笑',       time:6, thr:0.52, diff:'easy'},
+  {ex:'open_mouth',   emoji:'😮', label:'張開嘴',     time:6, thr:0.50, diff:'easy'},
+  {ex:'blink_both',   emoji:'😑', label:'閉眼',       time:6, thr:0.52, diff:'easy'},
+  {ex:'surprised',    emoji:'😲', label:'驚訝',       time:6, thr:0.50, diff:'easy'},
+  {ex:'eye_wide',     emoji:'👀', label:'睜大眼睛',   time:6, thr:0.50, diff:'easy'},
+  {ex:'pout',         emoji:'😗', label:'嘟嘴',       time:6, thr:0.52, diff:'easy'},
+  {ex:'wink',         emoji:'😉', label:'眨眼',       time:6, thr:0.52, diff:'easy'},
+  {ex:'sad',          emoji:'😢', label:'難過',       time:6, thr:0.50, diff:'easy'},
+  {ex:'neutral',      emoji:'😐', label:'撲克臉',     time:5, thr:0.52, diff:'easy'},
+  // MEDIUM
+  {ex:'blink_left',   emoji:'🫣', label:'只眨左眼',   time:4, thr:0.60, diff:'medium'},
+  {ex:'blink_right',  emoji:'😏', label:'只眨右眼',   time:4, thr:0.60, diff:'medium'},
+  {ex:'tongue_out',   emoji:'😛', label:'吐舌頭',     time:4, thr:0.60, diff:'medium'},
+  {ex:'squint',       emoji:'😤', label:'瞇眼',       time:4, thr:0.62, diff:'medium'},
+  {ex:'angry',        emoji:'😠', label:'生氣',       time:4, thr:0.60, diff:'medium'},
+  {ex:'disgusted',    emoji:'🤢', label:'噁心',       time:4, thr:0.60, diff:'medium'},
+  {ex:'smirk',        emoji:'😒', label:'壞笑',       time:4, thr:0.60, diff:'medium'},
+  {ex:'nose_wrinkle', emoji:'🐽', label:'皺鼻子',     time:4, thr:0.58, diff:'medium'},
+  {ex:'kiss',         emoji:'😘', label:'飛吻',       time:4, thr:0.62, diff:'medium'},
+  {ex:'cheek_puff',   emoji:'🐡', label:'鼓腮幫子',   time:4, thr:0.55, diff:'medium'},
+  // HARD
+  {ex:'chin_up',             emoji:'🫠', label:'抬下巴',     time:3, thr:0.65, diff:'hard'},
+  {ex:'head_tilt_left',      emoji:'🤔', label:'頭往左傾',   time:3, thr:0.65, diff:'hard'},
+  {ex:'head_tilt_right',     emoji:'🤭', label:'頭往右傾',   time:3, thr:0.65, diff:'hard'},
+  {ex:'eyebrow_raise',       emoji:'🤨', label:'挑眉',       time:3, thr:0.65, diff:'hard'},
+  {ex:'eyebrow_furrow',      emoji:'😬', label:'皺眉',       time:3, thr:0.65, diff:'hard'},
+  {ex:'double_wink',         emoji:'😜', label:'快速連眨',   time:3, thr:0.68, diff:'hard'},
+  {ex:'smile_blink',         emoji:'😁', label:'笑＋閉眼',   time:3, thr:0.68, diff:'hard'},
+  {ex:'brow_raise_mouth_open',emoji:'🥴',label:'挑眉＋張嘴', time:3, thr:0.65, diff:'hard'},
+  {ex:'pout_wink',           emoji:'😝', label:'嘟嘴＋眨眼', time:3, thr:0.68, diff:'hard'},
+  {ex:'full_face',           emoji:'🤪', label:'瘋狂全臉',   time:3, thr:0.62, diff:'hard'},
+];
+
+function shuffleLevels() {
+  const sh = a => [...a].sort(() => Math.random() - .5);
+  return [
+    ...sh(ALL_LEVELS.filter(l => l.diff === 'easy')),
+    ...sh(ALL_LEVELS.filter(l => l.diff === 'medium')),
+    ...sh(ALL_LEVELS.filter(l => l.diff === 'hard')),
+  ].map((l, i) => ({...l, id: i + 1}));
+}
+
+// ═══════════════════════════════════════════
+//  臉部偵測邏輯
+// ═══════════════════════════════════════════
+const LMI = {
+  L_EYE_T:159, L_EYE_B:145, R_EYE_T:386, R_EYE_B:374,
+  MOUTH_T:13,  MOUTH_B:14,  L_MOUTH:61,  R_MOUTH:291,
+  FACE_T:10,   FACE_B:152,  L_CHEEK:234, R_CHEEK:454,
+  L_BROW:70,   R_BROW:300,  NOSE:1,
+};
+const d2 = (a,b) => Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2);
+const fH = lm => d2(lm[LMI.FACE_T], lm[LMI.FACE_B]);
+const fW = lm => d2(lm[LMI.L_CHEEK], lm[LMI.R_CHEEK]);
+const eyeOpen = (lm,t,b) => { const h=fH(lm); return h?Math.min(d2(lm[t],lm[b])/(h*.09),1.5):0.5; };
+const mouthOpen = lm => { const h=fH(lm); return h?Math.min(d2(lm[LMI.MOUTH_T],lm[LMI.MOUTH_B])/(h*.09),1.5):0; };
+const mouthWidth = lm => { const w=fW(lm); return w?d2(lm[LMI.L_MOUTH],lm[LMI.R_MOUTH])/w:0.5; };
+const headTilt = lm => (lm[LMI.NOSE].x - 0.5) * 2;
+const browH = (lm,side) => { const et=side==='L'?LMI.L_EYE_T:LMI.R_EYE_T; const br=side==='L'?LMI.L_BROW:LMI.R_BROW; const h=fH(lm); return h?(lm[et].y-lm[br].y)/h:0; };
+
+function detectExpression(lm, target, threshold) {
+  const le=eyeOpen(lm,LMI.L_EYE_T,LMI.L_EYE_B);
+  const re=eyeOpen(lm,LMI.R_EYE_T,LMI.R_EYE_B);
+  const mo=mouthOpen(lm);
+  const mw=mouthWidth(lm);
+  const tilt=headTilt(lm);
+  const lbr=browH(lm,'L'), rbr=browH(lm,'R');
+  const avgBr=(lbr+rbr)/2;
+  const eyeDiff=Math.abs(le-re);
+  const cl = v => Math.max(0,Math.min(1,v));
+
+  const scores = {
+    smile:         cl(mw*2.2-0.5),
+    big_smile:     cl((mw*2.0+mo*0.5)*0.7-0.2),
+    open_mouth:    cl(mo*1.2-0.1),
+    blink_both:    cl((2-le-re)*0.9),
+    eye_wide:      cl((le+re-2)*1.0),
+    pout:          cl((0.48-mw)*4),
+    sad:           cl((0.40-mw)*5),
+    surprised:     cl(mo*0.5+(le+re-2)*0.3),
+    neutral:       cl(1-mo*2-Math.abs(mw-0.46)*4),
+    squint:        cl((2-le-re)*0.6),
+    tongue_out:    cl(mo*0.8),
+    angry:         cl(mo*0.3-avgBr*2),
+    disgusted:     cl(0.5-avgBr),
+    smirk:         cl(Math.abs(lm[LMI.L_MOUTH].y-lm[LMI.R_MOUTH].y)*fH(lm)*8),
+    kiss:          cl((0.38-mw)*5+mo*0.2),
+    cheek_puff:    cl(0.55-mo*0.3),
+    nose_wrinkle:  0.52,
+    eyebrow_raise: cl(avgBr*6),
+    eyebrow_furrow:cl(-avgBr*4),
+    wink:          cl(eyeDiff*2.0),
+    blink_left:    cl((1-le)*1.5-(1-re)*0.3),
+    blink_right:   cl((1-re)*1.5-(1-le)*0.3),
+    head_tilt_left:  cl(tilt*3),
+    head_tilt_right: cl(-tilt*3),
+    chin_up:       cl((lm[LMI.NOSE].y-0.50)*6),
+    smile_blink:   cl(mw*1.5*(2-le-re)*0.5),
+    double_wink:   cl(eyeDiff*1.8),
+    brow_raise_mouth_open: cl(avgBr*3+mo*0.5-0.2),
+    pout_wink:     cl((0.42-mw)*3+eyeDiff*1.5),
+    full_face:     cl(mo*0.3+mw*0.3+(le+re)*0.15+Math.abs(tilt)*0.2),
+  };
+  return (scores[target] ?? 0) >= threshold;
+}
+
+// ═══════════════════════════════════════════
+//  音效
+// ═══════════════════════════════════════════
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function playTone(freq, type, dur, vol=0.3) {
+  try {
+    const ctx = getAudio();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    o.start(); o.stop(ctx.currentTime + dur);
+  } catch(_) {}
+}
+
+// ═══════════════════════════════════════════
+//  遊戲狀態
+// ═══════════════════════════════════════════
+let state = {
+  screen: 'start',
+  username: 'player',
+  levels: [],
+  idx: 0,
+  timeLeft: 5,
+  status: 'detect',   // detect | ok | fail
+  errors: 0,
+  shots: [],
+  startTime: 0,
+  timerInterval: null,
+  faceMesh: null,
+  camera: null,
+  offsetX: 0,
+  faceFound: false,
+  collageUrl: '',
+  shareIdx: 0,
+  shareTexts: [],
+  copiedLink: false,
+};
+
+// ═══════════════════════════════════════════
+//  畫面切換
+// ═══════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  state.screen = id.replace('-screen','');
+}
+
+// ═══════════════════════════════════════════
+//  排行榜（localStorage 實作）
+// ═══════════════════════════════════════════
+const LB_KEY = 'face_challenge_lb';
+function getBoard() {
+  try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch { return []; }
+}
+function saveBoard(entries) {
+  localStorage.setItem(LB_KEY, JSON.stringify(entries));
+}
+function submitScore(username, time, errors) {
+  let board = getBoard();
+  const existing = board.findIndex(e => e.username === username);
+  if (existing >= 0) {
+    if (board[existing].time > time) board[existing] = { username, time, errors, comment: board[existing].comment || '' };
+  } else {
+    board.push({ username, time, errors, comment: '' });
+  }
+  board.sort((a,b) => a.time - b.time);
+  board = board.slice(0, 20);
+  saveBoard(board);
+  const rank = board.findIndex(e => e.username === username) + 1;
+  return rank;
+}
+function saveComment(username, comment) {
+  const board = getBoard();
+  const entry = board.find(e => e.username === username);
+  if (entry) {
+    entry.comment = comment.slice(0, 10);
+    saveBoard(board);
+  }
+}
+function renderBoard(containerEl, highlightUser) {
+  const board = getBoard();
+  if (!board.length) {
+    containerEl.innerHTML = '<div style="color:#4b5563;font-size:13px;text-align:center;padding:12px">還沒有人上榜，你來第一個？</div>';
+    return;
+  }
+  const medal = r => r===1?'🥇':r===2?'🥈':r===3?'🥉':`#${r}`;
+  const top3 = board.slice(0,3).map((e,i) => {
+    const isMe = e.username === highlightUser;
+    return `<div class="board-entry ${isMe?'me':''}">
+      <span class="board-medal">${medal(i+1)}</span>
+      <div style="flex:1;min-width:0">
+        <div class="board-name ${isMe?'me-name':''}">@${e.username}${isMe?' (你)':''}</div>
+        ${e.comment?`<div class="board-comment">「${e.comment}」</div>`:''}
+      </div>
+      <span class="board-time">${e.time}s</span>
+    </div>`;
+  }).join('');
+  const tail = board.slice(3);
+  const tailEl = tail.length ? `<div id="board-tail" class="board-scroll">
+    <span class="brank">#<span id="tail-rank">${tail[0].rank||4}</span></span>
+    <span id="tail-name">@${tail[0].username}</span>
+    <span style="margin-left:auto;font-family:monospace;font-size:12px" id="tail-time">${tail[0].time}s</span>
+  </div>` : '';
+  containerEl.innerHTML = top3 + tailEl;
+
+  if (tail.length > 1) {
+    let ti = 0;
+    setInterval(() => {
+      ti = (ti+1) % tail.length;
+      const e = tail[ti];
+      const rk = document.getElementById('tail-rank');
+      const nm = document.getElementById('tail-name');
+      const tm = document.getElementById('tail-time');
+      if (rk) rk.textContent = ti+4;
+      if (nm) nm.textContent = '@'+e.username;
+      if (tm) tm.textContent = e.time+'s';
+    }, 3000);
+  }
+}
+
+function toggleBoard() {
+  const sec = document.getElementById('lb-section');
+  if (sec.style.display === 'none') {
+    sec.style.display = 'block';
+    sec.innerHTML = '<div class="board-box" style="margin-top:0"><div class="board-title"><span>🏆 排行榜（前20名）</span></div><div id="lb-inner"></div></div>';
+    renderBoard(document.getElementById('lb-inner'), '');
+    document.querySelector('.btn-ghost').textContent = '收起排行榜 ▲';
+  } else {
+    sec.style.display = 'none';
+    document.querySelector('.btn-ghost').textContent = '查看排行榜 🏆';
+  }
+}
+
+// ═══════════════════════════════════════════
+//  開始遊戲
+// ═══════════════════════════════════════════
+async function startGame() {
+  const u = document.getElementById('username-input').value.replace(/^@/,'').trim() || 'player';
+  state.username = u;
+  state.levels = shuffleLevels();
+  state.idx = 0;
+  state.errors = 0;
+  state.shots = [];
+  state.startTime = Date.now();
+  state.offsetX = 0;
+  state.status = 'detect';
+
+  document.getElementById('hud-user').textContent = '@'+u;
+  showScreen('game-screen');
+  initLevel();
+  await initCamera();
+}
+
+function initLevel() {
+  const l = state.levels[state.idx];
+  state.timeLeft = l.time;
+  state.status = 'detect';
+
+  document.getElementById('progress-fill').style.width = (state.idx/30*100)+'%';
+  document.getElementById('hud-level').textContent = `關卡 ${state.idx+1}/30`;
+  document.getElementById('hud-errors').textContent = `失誤 ${state.errors}`;
+  document.getElementById('target-emoji').textContent = l.emoji;
+  document.getElementById('target-label').textContent = l.label;
+  document.getElementById('target-diff').textContent = l.diff === 'easy' ? '輕鬆' : l.diff === 'medium' ? '普通' : '挑戰';
+  updateTimerUI();
+  startCountdown();
+}
+
+function startCountdown() {
+  clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(() => {
+    if (state.status !== 'detect') return;
+    state.timeLeft--;
+    updateTimerUI();
+    if (state.timeLeft <= 0) {
+      clearInterval(state.timerInterval);
+      onFail();
+    }
+  }, 1000);
+}
+
+function updateTimerUI() {
+  const l = state.levels[state.idx];
+  const ratio = state.timeLeft / l.time;
+  const fill = document.getElementById('timer-fill');
+  fill.style.width = (ratio*100)+'%';
+  fill.className = 'timer-fill ' + (ratio>.5?'green':ratio>.25?'yellow':'red');
+  document.getElementById('timer-sec').textContent = state.timeLeft+'s';
+}
+
+function onSuccess() {
+  if (state.status !== 'detect') return;
+  state.status = 'ok';
+  clearInterval(state.timerInterval);
+
+  playTone(880, 'sine', 0.25, 0.3);
+
+  // 截圖
+  const shot = takeShot();
+  state.shots.push(shot);
+
+  // 動畫
+  document.getElementById('target-emoji').classList.add('pop');
+  setTimeout(() => document.getElementById('target-emoji').classList.remove('pop'), 300);
+  showOverlay('ok');
+
+  // 跑酷推進
+  state.offsetX -= 60;
+  document.getElementById('runner-lines').style.transform = `translateX(${state.offsetX * 1.5}px)`;
+  document.getElementById('camera-canvas').style.transform = `translateX(${state.offsetX}px)`;
+
+  setTimeout(() => {
+    hideOverlays();
+    state.idx++;
+    if (state.idx >= 30) {
+      endGame();
+    } else {
+      initLevel();
+    }
+  }, 550);
+}
+
+function onFail() {
+  if (state.status === 'fail') return;
+  state.status = 'fail';
+  state.errors++;
+
+  playTone(180, 'sawtooth', 0.4, 0.35);
+  showOverlay('fail');
+
+  // 後退感
+  state.offsetX += 35;
+  document.getElementById('runner-lines').style.transform = `translateX(${state.offsetX * 1.5}px)`;
+  document.getElementById('camera-canvas').style.transform = `translateX(${state.offsetX}px)`;
+
+  setTimeout(() => {
+    hideOverlays();
+    state.status = 'detect';
+    state.timeLeft = state.levels[state.idx].time;
+    document.getElementById('hud-errors').textContent = `失誤 ${state.errors}`;
+    updateTimerUI();
+    startCountdown();
+  }, 700);
+}
+
+function showOverlay(type) {
+  document.getElementById('overlay-ok').style.display   = type==='ok'   ? 'flex' : 'none';
+  document.getElementById('overlay-fail').style.display = type==='fail' ? 'flex' : 'none';
+}
+function hideOverlays() {
+  document.getElementById('overlay-ok').style.display   = 'none';
+  document.getElementById('overlay-fail').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+//  截圖
+// ═══════════════════════════════════════════
+function takeShot() {
+  const video = document.getElementById('cam-video');
+  const sc = document.getElementById('shot-canvas');
+  sc.width = 200; sc.height = 200;
+  const ctx = sc.getContext('2d');
+  ctx.save(); ctx.scale(-1,1);
+  ctx.drawImage(video, -200, 0, 200, 200);
+  ctx.restore();
+  return sc.toDataURL('image/jpeg', 0.65);
+}
+
+// ═══════════════════════════════════════════
+//  MediaPipe 初始化
+// ═══════════════════════════════════════════
+async function initCamera() {
+  const video  = document.getElementById('cam-video');
+  const canvas = document.getElementById('camera-canvas');
+
+  const fm = new FaceMesh({ locateFile: f =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
+  });
+  fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+
+  fm.onResults(results => {
+    if (state.screen !== 'game') return;
+
+    const w = results.image.width  || video.videoWidth  || 640;
+    const h = results.image.height || video.videoHeight || 480;
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.save(); ctx.scale(-1,1); ctx.translate(-w,0);
+    ctx.drawImage(results.image, 0, 0);
+    ctx.restore();
+
+    const hasLM = results.multiFaceLandmarks?.length > 0;
+    state.faceFound = hasLM;
+    document.getElementById('no-face').style.display = hasLM ? 'none' : 'block';
+
+    if (!hasLM || state.status !== 'detect') return;
+
+    const lm = results.multiFaceLandmarks[0];
+    const level = state.levels[state.idx];
+    if (detectExpression(lm, level.ex, level.thr)) {
+      onSuccess();
+    }
+  });
+
+  state.faceMesh = fm;
+
+  const cam = new Camera(video, {
+    onFrame: async () => { if (state.faceMesh) await state.faceMesh.send({ image: video }); },
+    width: 640, height: 480,
+  });
+  await cam.start();
+  state.camera = cam;
+
+  document.getElementById('loading-screen').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+//  通關結算
+// ═══════════════════════════════════════════
+function endGame() {
+  clearInterval(state.timerInterval);
+  state.camera?.stop();
+
+  const totalTime = Math.floor((Date.now() - state.startTime) / 1000);
+  const completed = state.shots.length;
+
+  // 標題生成
+  const title = generateTitle(completed, totalTime, state.errors);
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-sub').textContent =
+    completed === 30
+      ? `通關時間：${totalTime} 秒　失誤：${state.errors} 次`
+      : `完成 ${completed} / 30 關`;
+
+  // 分享文案
+  state.shareTexts = generateShareTexts(state.username, completed, totalTime, CONFIG.gameUrl);
+  state.shareIdx = 0;
+  document.getElementById('share-text').textContent = state.shareTexts[0];
+  document.getElementById('game-url-display').textContent = CONFIG.gameUrl;
+  document.getElementById('author-link').href = `https://threads.net/@${CONFIG.authorThreads}`;
+  document.getElementById('author-link').textContent = `@${CONFIG.authorThreads}`;
+
+  // 排名（只有30關才上榜）
+  let rank = null;
+  if (completed === 30) {
+    rank = submitScore(state.username, totalTime, state.errors);
+    renderRankBadge(rank, state.username);
+  }
+
+  // 結果排行榜
+  const rb = document.getElementById('result-board');
+  rb.innerHTML = '<div class="board-title"><span>🏆 排行榜</span></div><div id="rb-inner"></div>';
+  renderBoard(document.getElementById('rb-inner'), state.username);
+
+  showScreen('result-screen');
+
+  // 生成拼圖
+  buildCollage(state.shots, state.username, completed, totalTime, CONFIG.gameUrl);
+}
+
+function renderRankBadge(rank, username) {
+  if (!rank || rank > 20) { document.getElementById('rank-section').innerHTML = ''; return; }
+  const isTop3 = rank <= 3;
+  const medal = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'🔥';
+  let commentHtml = '';
+  if (isTop3) {
+    commentHtml = `<div class="comment-row">
+      <input id="comment-input" type="text" maxlength="10" placeholder="留下冠軍宣言（10字內）">
+      <button onclick="submitComment('${username}')">送出</button>
+    </div>`;
+  }
+  document.getElementById('rank-section').innerHTML = `
+    <div class="rank-badge ${isTop3?'gold':'purple'}">
+      <div class="rank-icon">${medal}</div>
+      <div class="rank-text">你擠進排行榜第 ${rank} 名！</div>
+      ${commentHtml}
+      <div id="comment-sent" style="display:none;color:#fbbf24;font-size:13px;margin-top:6px">已留言！顯示在排行榜 🎉</div>
+    </div>`;
+}
+
+function submitComment(username) {
+  const input = document.getElementById('comment-input');
+  if (!input?.value.trim()) return;
+  saveComment(username, input.value);
+  document.getElementById('comment-sent').style.display = 'block';
+  input.parentElement.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+//  拼圖生成
+// ═══════════════════════════════════════════
+function buildCollage(shots, username, completed, totalTime, gameUrl) {
+  const wrap = document.getElementById('collage-wrap');
+  const canvas = document.createElement('canvas');
+  const W = 600, H = 740;
+  canvas.width = W; canvas.height = H;
+  const c = canvas.getContext('2d');
+
+  // 背景
+  const bg = c.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#1a0a2e'); bg.addColorStop(1,'#0f0f1a');
+  c.fillStyle = bg; c.fillRect(0,0,W,H);
+
+  // 標題欄
+  c.fillStyle = '#7c3aed'; c.fillRect(0,0,W,36);
+  c.fillStyle = '#fff'; c.font = 'bold 14px sans-serif';
+  c.textAlign = 'center';
+  c.fillText('🎭 表情挑戰 Face Challenge', W/2, 24);
+
+  const cols=5, rows=6, pad=6, topOff=44;
+  const cellW=(W-pad*(cols+1))/cols, cellH=cellW;
+
+  const roundRect = (ctx, x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+  };
+
+  let loaded = 0;
+  const total = Math.min(shots.length, 30);
+
+  // 填充空格
+  for (let i=0; i<30; i++) {
+    const col=i%cols, row=Math.floor(i/cols);
+    const x=pad+col*(cellW+pad), y=topOff+pad+row*(cellH+pad);
+    c.fillStyle='#1a0a2e'; c.fillRect(x,y,cellW,cellH);
+  }
+
+  const finish = () => {
+    const infoY = topOff+pad+rows*(cellH+pad)+8;
+    c.fillStyle='rgba(0,0,0,0.7)'; c.fillRect(0,infoY,W,H-infoY);
+    c.textAlign='left';
+    c.fillStyle='#a78bfa'; c.font='bold 16px sans-serif';
+    c.fillText('表情挑戰 Face Challenge', 18, infoY+24);
+    c.fillStyle='#fff'; c.font='13px sans-serif';
+    c.fillText('@'+username, 18, infoY+44);
+    c.fillStyle='#d8b4fe'; c.font='bold 13px sans-serif';
+    c.fillText(
+      completed===30 ? `🏆 通關！${totalTime} 秒 · 失誤 ${state.errors} 次` : `完成 ${completed}/30 關`,
+      18, infoY+62
+    );
+    c.fillStyle='#6b7280'; c.font='11px sans-serif';
+    c.fillText(gameUrl, 18, infoY+80);
+
+    state.collageUrl = canvas.toDataURL('image/png');
+    const img = document.createElement('img');
+    img.src = state.collageUrl;
+    wrap.innerHTML = '';
+    wrap.appendChild(img);
+    document.getElementById('btn-download').disabled = false;
+  };
+
+  if (total === 0) { finish(); return; }
+
+  shots.slice(0,30).forEach((src, i) => {
+    const img = new Image();
+    img.onload = () => {
+      const col=i%cols, row=Math.floor(i/cols);
+      const x=pad+col*(cellW+pad), y=topOff+pad+row*(cellH+pad);
+      c.save(); roundRect(c,x,y,cellW,cellH,6); c.clip();
+      c.drawImage(img, x, y, cellW, cellH);
+      c.restore();
+      c.fillStyle='rgba(0,0,0,0.6)'; c.fillRect(x,y+cellH-18,26,17);
+      c.fillStyle='#d8b4fe'; c.font='bold 9px sans-serif'; c.textAlign='left';
+      c.fillText('#'+(i+1), x+4, y+cellH-5);
+      loaded++;
+      if (loaded >= total) finish();
+    };
+    img.onerror = () => { loaded++; if (loaded >= total) finish(); };
+    img.src = src;
+  });
+}
+
+// ═══════════════════════════════════════════
+//  分享文案生成
+// ═══════════════════════════════════════════
+function generateTitle(completed, totalTime, errors) {
+  if (completed < 10) {
+    const a = [`只過了${completed}關就掛了😭 臉部肌肉不夠強`, `第${completed}關就崩了🤣 你行你來啊`, `沒想到這麼難，只撐到第${completed}關`];
+    return a[Math.floor(Math.random()*3)];
+  }
+  if (completed < 20) {
+    const a = [`過了${completed}關，臉已經快不是我的了🥲`, `第${completed}關就GG，你比我厲害嗎？`, `${completed}/30，算不算差強人意？😅`];
+    return a[Math.floor(Math.random()*3)];
+  }
+  if (completed < 30) {
+    const a = [`撐到第${completed}關差點全破！`, `${completed}關，差一點就全過了😤`, `過了${completed}關，臉快抽筋🤪`];
+    return a[Math.floor(Math.random()*3)];
+  }
+  if (errors===0 && totalTime<60) return `0失誤${totalTime}秒全過30關，我是表情之神🏆`;
+  if (errors===0) return `30關全過，零失誤！臉部肌肉滿格💪`;
+  if (totalTime<90) return `${totalTime}秒通關30關，我臉速飛快😂`;
+  if (totalTime>200) return `臉快抽筋了🤣 但我還是30關全過了！`;
+  const a = [`我居然撐到第30關😂 失誤${errors}次但值得`, `這遊戲比我想像中難...但我通關了😤`, `我臉快抽筋了🤣 你能比我快嗎？`];
+  return a[Math.floor(Math.random()*3)];
+}
+
+function generateShareTexts(username, completed, totalTime, gameUrl) {
+  const result = completed===30 ? `30關全過 · ${totalTime}秒` : `完成${completed}/30關`;
+  return [
+    `我剛剛玩這個表情挑戰，${result} 😂\n你能過幾關？👉 ${gameUrl}\n#表情挑戰 #臉部挑戰`,
+    `朋友快來！這遊戲讓我臉崩了🤣\n@${username} ${result}，你來挑戰！\n👉 ${gameUrl}\n#FaceChallenge`,
+    `用臉通關挑戰！${result}\n你敢來battle嗎？😏\n${gameUrl}\n#表情挑戰遊戲`,
+    `這遊戲真的很好笑，對著鏡頭做表情😂\n${result}，快來玩！\n${gameUrl}`,
+  ];
+}
+
+function swapText() {
+  state.shareIdx = (state.shareIdx + 1) % state.shareTexts.length;
+  document.getElementById('share-text').textContent = state.shareTexts[state.shareIdx];
+}
+
+function copyText() {
+  navigator.clipboard.writeText(state.shareTexts[state.shareIdx]).then(() => {
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = '✅ 已複製！去貼到 Threads';
+    setTimeout(() => btn.textContent = '📋 複製文案 → 貼到 Threads', 2200);
+  });
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(CONFIG.gameUrl).then(() => {
+    const btn = event.target;
+    btn.textContent = '✅ 已複製連結！';
+    setTimeout(() => btn.textContent = '複製遊戲連結 🔗', 2200);
+  });
+}
+
+function downloadCollage() {
+  if (!state.collageUrl) return;
+  const a = document.createElement('a');
+  a.href = state.collageUrl;
+  a.download = `face-challenge-${state.username}.png`;
+  a.click();
+}
+
+function restartGame() {
+  if (state.camera) { state.camera.stop(); state.camera = null; }
+  if (state.faceMesh) { state.faceMesh.close(); state.faceMesh = null; }
+  clearInterval(state.timerInterval);
+  hideOverlays();
+  document.getElementById('loading-screen').style.display = 'none';
+  showScreen('start-screen');
+}
+
+// ═══════════════════════════════════════════
+//  初始化
+// ═══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  // 隱藏載入畫面（MediaPipe 在遊戲開始時才載入）
+  document.getElementById('loading-screen').style.display = 'none';
+  showScreen('start-screen');
+  document.getElementById('author-link').href = `https://threads.net/@${CONFIG.authorThreads}`;
+  document.getElementById('author-link').textContent = `@${CONFIG.authorThreads}`;
+});
+</script>
+</body>
+</html>
