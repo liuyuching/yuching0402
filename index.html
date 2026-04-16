@@ -44,8 +44,22 @@
 
   /* GAME */
   #game-screen{background:#000}
-  #camera-canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-  video{display:none}
+  /* video 直接顯示為相機背景，鏡像翻轉讓自拍符合直覺 */
+  #cam-video{
+    position:absolute;inset:0;
+    width:100%;height:100%;
+    object-fit:cover;
+    transform:scaleX(-1);   /* 鏡像，讓使用者看到自拍效果 */
+    display:block;
+  }
+  /* canvas 疊在 video 上，只畫 MediaPipe 偵測結果（透明背景） */
+  #camera-canvas{
+    position:absolute;inset:0;
+    width:100%;height:100%;
+    object-fit:cover;
+    pointer-events:none;
+    opacity:0;             /* 預設隱藏，MediaPipe 就緒後才顯示 */
+  }
   #shot-canvas{display:none}
   .runner-lines{position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(90deg,transparent,transparent 100px,rgba(255,255,255,0.025) 100px,rgba(255,255,255,0.025) 101px);transition:transform .35s ease}
   .hud-top{position:absolute;top:0;left:0;right:0;padding:10px 14px 20px;background:linear-gradient(180deg,rgba(0,0,0,.8) 0%,transparent 100%)}
@@ -140,9 +154,12 @@
   <div id="game-area">
 
     <!-- 載入中 -->
-    <div id="loading-screen">
-      <div class="loading-emoji">🎭</div>
-      <div class="loading-text">載入臉部辨識引擎...</div>
+    <div id="loading-screen" style="display:none;position:absolute;inset:0;background:#0f0f1a;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:100">
+      <div style="font-size:48px;animation:spin 1.5s linear infinite">🎭</div>
+      <div style="font-size:15px;color:#a78bfa;font-weight:700">啟動相機中...</div>
+      <div style="font-size:12px;color:#4b5563;text-align:center;max-width:200px;line-height:1.7">
+        請在彈出視窗中<br>點「允許」以開啟相機
+      </div>
     </div>
 
     <!-- 開始畫面 -->
@@ -519,9 +536,13 @@ async function startGame() {
   state.status = 'detect';
 
   document.getElementById('hud-user').textContent = '@'+u;
+
+  // 先切換到遊戲畫面，顯示載入中
   showScreen('game-screen');
+  document.getElementById('loading-screen').style.display = 'flex';
+
   initLevel();
-  await initCamera();
+  await initCamera(); // initCamera 內部處理載入完成後隱藏 loading
 }
 
 function initLevel() {
@@ -626,14 +647,16 @@ function hideOverlays() {
 }
 
 // ═══════════════════════════════════════════
-//  截圖
+//  截圖（從 video 直接截，鏡像翻轉）
 // ═══════════════════════════════════════════
 function takeShot() {
   const video = document.getElementById('cam-video');
   const sc = document.getElementById('shot-canvas');
   sc.width = 200; sc.height = 200;
   const ctx = sc.getContext('2d');
-  ctx.save(); ctx.scale(-1,1);
+  // video 已是鏡像顯示，截圖時再翻回正面（左右正確）
+  ctx.save();
+  ctx.scale(-1, 1);
   ctx.drawImage(video, -200, 0, 200, 200);
   ctx.restore();
   return sc.toDataURL('image/jpeg', 0.65);
@@ -645,22 +668,51 @@ function takeShot() {
 async function initCamera() {
   const video  = document.getElementById('cam-video');
   const canvas = document.getElementById('camera-canvas');
+  const loading = document.getElementById('loading-screen');
 
+  // ── 步驟1：先用原生 getUserMedia 讓相機畫面立即顯示 ──
+  // 不等 MediaPipe，確保使用者馬上看到自己的臉
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+    // 相機畫面已顯示，隱藏載入畫面
+    loading.style.display = 'none';
+  } catch (err) {
+    loading.innerHTML = `
+      <div style="text-align:center;padding:24px;max-width:280px">
+        <div style="font-size:48px;margin-bottom:12px">📷</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">需要相機權限</div>
+        <div style="font-size:13px;color:#6b7280;line-height:1.7;margin-bottom:16px">
+          請允許相機存取，<br>然後重新整理頁面
+        </div>
+        <button onclick="location.reload()" style="background:#7c3aed;border:none;border-radius:12px;padding:12px 24px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+          重新整理 🔄
+        </button>
+      </div>`;
+    return;
+  }
+
+  // ── 步驟2：背景載入 MediaPipe，不影響相機顯示 ──
   const fm = new FaceMesh({ locateFile: f =>
     `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
   });
-  fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+  fm.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
 
   fm.onResults(results => {
     if (state.screen !== 'game') return;
 
-    const w = results.image.width  || video.videoWidth  || 640;
-    const h = results.image.height || video.videoHeight || 480;
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.save(); ctx.scale(-1,1); ctx.translate(-w,0);
-    ctx.drawImage(results.image, 0, 0);
-    ctx.restore();
+    // MediaPipe 就緒後：用 canvas 畫辨識輔助框（可選）
+    // 目前保持 canvas opacity:0，純用 video 顯示畫面
+    // 若想畫關鍵點可在此加繪製邏輯
 
     const hasLM = results.multiFaceLandmarks?.length > 0;
     state.faceFound = hasLM;
@@ -677,14 +729,19 @@ async function initCamera() {
 
   state.faceMesh = fm;
 
+  // ── 步驟3：用 MediaPipe Camera utils 驅動辨識循環 ──
+  // 它會接管 video stream，但畫面已經在顯示了
   const cam = new Camera(video, {
-    onFrame: async () => { if (state.faceMesh) await state.faceMesh.send({ image: video }); },
-    width: 640, height: 480,
+    onFrame: async () => {
+      if (state.faceMesh && state.screen === 'game') {
+        await state.faceMesh.send({ image: video });
+      }
+    },
+    width: 640,
+    height: 480,
   });
-  await cam.start();
+  cam.start(); // 不 await，讓它背景跑
   state.camera = cam;
-
-  document.getElementById('loading-screen').style.display = 'none';
 }
 
 // ═══════════════════════════════════════════
@@ -692,7 +749,15 @@ async function initCamera() {
 // ═══════════════════════════════════════════
 function endGame() {
   clearInterval(state.timerInterval);
-  state.camera?.stop();
+
+  // 停止辨識但保留 video 畫面（結果頁不需要相機）
+  if (state.camera) { try { state.camera.stop(); } catch(_){} state.camera = null; }
+  if (state.faceMesh) { try { state.faceMesh.close(); } catch(_){} state.faceMesh = null; }
+  const video = document.getElementById('cam-video');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
 
   const totalTime = Math.floor((Date.now() - state.startTime) / 1000);
   const completed = state.shots.length;
@@ -912,9 +977,19 @@ function downloadCollage() {
 }
 
 function restartGame() {
-  if (state.camera) { state.camera.stop(); state.camera = null; }
-  if (state.faceMesh) { state.faceMesh.close(); state.faceMesh = null; }
   clearInterval(state.timerInterval);
+
+  // 停止 MediaPipe
+  if (state.camera) { try { state.camera.stop(); } catch(_){} state.camera = null; }
+  if (state.faceMesh) { try { state.faceMesh.close(); } catch(_){} state.faceMesh = null; }
+
+  // 釋放相機 stream
+  const video = document.getElementById('cam-video');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+
   hideOverlays();
   document.getElementById('loading-screen').style.display = 'none';
   showScreen('start-screen');
